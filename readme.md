@@ -18,12 +18,14 @@ Twitter GraphQL API implementation with [SNScrape](https://github.com/JustAnothe
 
 ## Install
 
+This fork is not published to PyPI. Install directly from GitHub:
+
 ```bash
-pip install twscrape
-```
-Or development version:
-```bash
-pip install git+https://github.com/vladkens/twscrape.git
+# pip
+pip install git+https://github.com/Telesphoreo/twscrape.git
+
+# uv
+uv add twscrape --git https://github.com/Telesphoreo/twscrape.git
 ```
 
 ## Features
@@ -322,6 +324,42 @@ _Note:_ If proxy not working, exception will be raised from API class.
 - `TWS_PROXY` - global proxy for all accounts (e.g. `socks5://user:pass@127.0.0.1:1080`)
 - `TWS_WAIT_EMAIL_CODE` - timeout for email verification code during login (default: `30`, in seconds)
 - `TWS_RAISE_WHEN_NO_ACCOUNT` - raise `NoAccountError` exception when no available accounts, instead of waiting (default: `false`, values: `false`/`0`/`true`/`1`)
+
+## Claude Code Skills
+
+This repo includes [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) that teach Claude how to use twscrape correctly. If you use [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), these skills let Claude write twscrape code with proper async patterns, avoid common anti-patterns, and leverage built-in features like rate limiting and account rotation instead of reimplementing them.
+
+### Setup
+
+Copy the skill files from the `skills/` directory into your project's `.claude/skills/` directory:
+
+```bash
+# From your project root
+mkdir -p .claude/skills
+cp path/to/twscrape/skills/twscrape-*.md .claude/skills/
+```
+
+Or with curl:
+
+```bash
+mkdir -p .claude/skills
+for skill in setup api best-practices async-patterns search accounts models proxy; do
+  curl -sL "https://raw.githubusercontent.com/Telesphoreo/twscrape/main/skills/twscrape-${skill}.md" -o ".claude/skills/twscrape-${skill}.md"
+done
+```
+
+The skills are split into small focused files so Claude only loads the relevant context:
+
+| Skill | Triggers when... |
+|---|---|
+| `twscrape-setup` | Installing twscrape or initializing the API |
+| `twscrape-api` | Writing code that calls twscrape methods |
+| `twscrape-best-practices` | Writing or reviewing any twscrape code |
+| `twscrape-async-patterns` | Using async generators, gather, or parallel scraping |
+| `twscrape-search` | Building search queries with X operators |
+| `twscrape-accounts` | Managing the account pool, health, or recovery |
+| `twscrape-models` | Accessing Tweet/User/Media data fields |
+| `twscrape-proxy` | Configuring proxies |
 
 ## Limitations
 
