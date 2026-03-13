@@ -69,6 +69,7 @@ KV = dict | None
 TrendId = Literal["trending", "news", "sport", "entertainment"] | str
 
 
+
 class API:
     # Note: kv is variables, ft is features from original GQL request
     pool: AccountsPool
@@ -116,6 +117,8 @@ class API:
     ):
         queue, cur, cnt, active = op.split("/")[-1], None, 0, True
         kv, ft = {**kv}, {**GQL_FEATURES, **(ft or {})}
+        prev_cur = None
+        seen_ids: set[str] = set()
 
         async with QueueClient(self.pool, queue, self.debug, proxy=self.proxy) as client:
             pages_until_rotate = random.randint(1, 3)
@@ -146,7 +149,16 @@ class API:
                 ]
                 cur = self._get_cursor(obj, cursor_type)
 
-                rep, cnt, active = self._is_end(rep, queue, els, cur, cnt, limit)
+                # detect stuck cursor (same cursor returned twice in a row)
+                if cur is not None and cur == prev_cur:
+                    return
+                prev_cur = cur
+
+                # filter out entries we've already seen from previous pages
+                new_els = [x for x in els if x["entryId"] not in seen_ids]
+                seen_ids.update(x["entryId"] for x in els)
+
+                rep, cnt, active = self._is_end(rep, queue, new_els, cur, cnt, limit)
                 if rep is None:
                     return
 
@@ -183,17 +195,23 @@ class API:
                 yield x
 
     async def search(self, q: str, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.search_raw(q, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     async def search_user(self, q: str, limit=-1, kv: KV = None):
         kv = {"product": "People", **(kv or {})}
+        seen: set[int] = set()
         async with aclosing(self.search_raw(q, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_users(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # user_by_id
 
@@ -284,10 +302,12 @@ class API:
                 yield x
 
     async def tweet_replies(self, twid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.tweet_replies_raw(twid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep.json(), limit):
-                    if x.inReplyToTweetId == twid:
+                    if x.inReplyToTweetId == twid and x.id not in seen:
+                        seen.add(x.id)
                         yield x
 
     # followers
@@ -306,10 +326,13 @@ class API:
                 yield x
 
     async def followers(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.followers_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_users(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # verified_followers
 
@@ -327,10 +350,13 @@ class API:
                 yield x
 
     async def verified_followers(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.verified_followers_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_users(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # following
 
@@ -348,10 +374,13 @@ class API:
                 yield x
 
     async def following(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.following_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_users(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # subscriptions
 
@@ -363,10 +392,13 @@ class API:
                 yield x
 
     async def subscriptions(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.subscriptions_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_users(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # retweeters
 
@@ -384,10 +416,13 @@ class API:
                 yield x
 
     async def retweeters(self, twid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.retweeters_raw(twid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_users(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # user_tweets
 
@@ -406,10 +441,13 @@ class API:
                 yield x
 
     async def user_tweets(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.user_tweets_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # user_tweets_and_replies
 
@@ -428,10 +466,13 @@ class API:
                 yield x
 
     async def user_tweets_and_replies(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.user_tweets_and_replies_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # user_media
 
@@ -452,6 +493,7 @@ class API:
                 yield x
 
     async def user_media(self, uid: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.user_media_raw(uid, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep, limit):
@@ -462,7 +504,8 @@ class API:
                         else 0
                     )
 
-                    if media_count > 0:
+                    if media_count > 0 and x.id not in seen:
+                        seen.add(x.id)
                         yield x
 
     # list_timeline
@@ -475,10 +518,13 @@ class API:
                 yield x
 
     async def list_timeline(self, list_id: int, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.list_timeline_raw(list_id, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep, limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # trends
 
@@ -503,20 +549,26 @@ class API:
                 yield x
 
     async def trends(self, trend_id: TrendId, limit=-1, kv: KV = None):
+        seen: set[str] = set()
         async with aclosing(self.trends_raw(trend_id, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_trends(rep, limit):
-                    yield x
+                    if x.name not in seen:
+                        seen.add(x.name)
+                        yield x
 
     async def search_trend(self, q: str, limit=-1, kv: KV = None):
         kv = {
             "querySource": "trend_click",
             **(kv or {}),
         }
+        seen: set[int] = set()
         async with aclosing(self.search_raw(q, limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
 
     # Get current user bookmarks
 
@@ -532,7 +584,10 @@ class API:
                 yield x
 
     async def bookmarks(self, limit=-1, kv: KV = None):
+        seen: set[int] = set()
         async with aclosing(self.bookmarks_raw(limit=limit, kv=kv)) as gen:
             async for rep in gen:
                 for x in parse_tweets(rep.json(), limit):
-                    yield x
+                    if x.id not in seen:
+                        seen.add(x.id)
+                        yield x
