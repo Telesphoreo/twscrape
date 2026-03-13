@@ -25,7 +25,7 @@ This fork is not published to PyPI. Install directly from GitHub:
 pip install git+https://github.com/Telesphoreo/twscrape.git
 
 # uv
-uv add twscrape --git https://github.com/Telesphoreo/twscrape.git
+uv add git+https://github.com/Telesphoreo/twscrape.git
 ```
 
 ## Features

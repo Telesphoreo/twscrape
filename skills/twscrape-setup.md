@@ -15,7 +15,7 @@ twscrape is an async Python library for scraping Twitter/X via their internal Gr
 pip install git+https://github.com/Telesphoreo/twscrape.git
 
 # uv
-uv add twscrape --git https://github.com/Telesphoreo/twscrape.git
+uv add git+https://github.com/Telesphoreo/twscrape.git
 ```
 
 ## Initialization
