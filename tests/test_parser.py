@@ -41,7 +41,7 @@ def fake_rep(filename: str):
     filename = filename if filename.endswith(".json") else f"{filename}.json"
     filename = filename if filename.startswith("/") else os.path.join(DATA_DIR, filename)
 
-    with open(filename) as fp:
+    with open(filename, encoding="utf-8") as fp:
         return FakeRep(fp.read())
 
 

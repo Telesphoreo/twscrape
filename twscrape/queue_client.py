@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import random
 from typing import Any
 from urllib.parse import urlparse
 
@@ -14,6 +15,9 @@ from .xclid import XClIdGen
 
 ReqParams = dict[str, str | int] | None
 TMP_TS = utc.now().isoformat().split(".")[0].replace("T", "_").replace(":", "-")[0:16]
+
+RATE_LIMIT_RESERVE_FRACTION = 0.20  # rotate account when this fraction of budget remains
+REQUEST_DELAY_RANGE = (1.0, 3.0)  # uniform random delay (seconds) between requests on same account
 
 
 class HandledError(Exception): ...
@@ -195,6 +199,15 @@ class QueueClient:
             await self._close_ctx(limit_reset)
             raise HandledError()
 
+        # proactive rate limit: rotate before hitting zero to avoid triggering Twitter's limits
+        limit_max = int(rep.headers.get("x-rate-limit-limit", -1))
+        if limit_max > 0 and limit_remaining > 0 and limit_reset > 0:
+            threshold = max(1, int(limit_max * RATE_LIMIT_RESERVE_FRACTION))
+            if limit_remaining <= threshold:
+                logger.debug(f"Proactive rate limit rotation: {limit_remaining}/{limit_max} remaining")
+                await self._close_ctx(limit_reset)
+                raise HandledError()
+
         # no way to check is account banned in direct way, but this check should work
         if err_msg.startswith("(88) Rate limit exceeded") and limit_remaining > 0:
             logger.warning(f"Ban detected: {log_msg}")
@@ -246,6 +259,10 @@ class QueueClient:
             await self._close_ctx(utc.ts() + 60 * 15)  # 15 minutes
             raise HandledError()
 
+    async def rotate(self):
+        """Close the current account context and acquire a new one on next request."""
+        await self._close_ctx()
+
     async def get(self, url: str, params: ReqParams = None) -> Response | None:
         return await self.req("GET", url, params=params)
 
@@ -258,6 +275,11 @@ class QueueClient:
                 return None
 
             try:
+                # add jitter between requests to avoid machine-like patterns
+                if ctx.req_count > 0:
+                    delay = random.uniform(*REQUEST_DELAY_RANGE)
+                    await asyncio.sleep(delay)
+
                 rep = await ctx.req(method, url, params=params)
                 setattr(rep, "__username", ctx.acc.username)
                 await self._check_rep(rep)

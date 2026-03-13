@@ -8,3 +8,6 @@ accounts.db*
 data/
 data_media/
 dist/
+__pycache__
+.idea
+.venv

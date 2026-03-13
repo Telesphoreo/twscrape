@@ -32,9 +32,11 @@ def guess_delim(line: str):
     return rp[0] if not lp else lp[-1]
 
 
+ACCOUNT_COOLDOWN_SECONDS = 5  # minimum seconds before an account can be reused for any queue
+
+
 class AccountsPool:
-    # _order_by: str = "RANDOM()"
-    _order_by: str = "username"
+    _order_by: str = "COALESCE(last_used, '1970-01-01') ASC, RANDOM()"
 
     def __init__(
         self,
@@ -270,6 +272,7 @@ class AccountsPool:
         return Account.from_rs(rs) if rs else None
 
     async def get_for_queue(self, queue: str):
+        cooldown_ts = utc.ts() - ACCOUNT_COOLDOWN_SECONDS
         q = f"""
         SELECT username FROM accounts
         WHERE active = true AND (
@@ -277,6 +280,7 @@ class AccountsPool:
             OR json_extract(locks, '$.{queue}') IS NULL
             OR json_extract(locks, '$.{queue}') < datetime('now')
         )
+        AND (last_used IS NULL OR last_used < datetime({cooldown_ts}, 'unixepoch'))
         ORDER BY {self._order_by}
         LIMIT 1
         """

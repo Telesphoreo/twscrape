@@ -1,4 +1,4 @@
-from twscrape.accounts_pool import AccountsPool
+from twscrape.accounts_pool import ACCOUNT_COOLDOWN_SECONDS, AccountsPool
 from twscrape.utils import utc
 
 
@@ -95,8 +95,11 @@ async def test_account_unlock(pool_mock: AccountsPool):
     assert acc is not None
     assert acc.locks[Q] is not None
 
-    # should unlock account and make available for queue
+    # should unlock account and make available for queue (backdate last_used past cooldown)
     await pool_mock.unlock(acc.username, Q)
+    from twscrape.db import execute
+    backdate_ts = utc.ts() - ACCOUNT_COOLDOWN_SECONDS - 1
+    await execute(pool_mock._db_file, f"UPDATE accounts SET last_used = datetime({backdate_ts}, 'unixepoch') WHERE username = 'user1'")
     acc = await pool_mock.get_for_queue(Q)
     assert acc is not None
     assert acc.locks[Q] is not None
