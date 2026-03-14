@@ -85,6 +85,26 @@ class MediaVideoVariant:
     bitrate: int | None
 ```
 
+## AccountAbout
+
+Account metadata from the "About this account" API. Use `api.user_about("username")`.
+
+```python
+@dataclass
+class AccountAbout:
+    screen_name: str
+    name: str
+    rest_id: int
+    account_based_in: str | None
+    location_accurate: bool | None
+    affiliate_username: str | None
+    source: str | None
+    username_changes: int | None
+    username_last_changed_at: int | None   # msec timestamp
+    is_identity_verified: bool | None
+    verified_since_msec: int | None        # msec timestamp
+```
+
 ## Supporting Types
 
 - `UserRef`: `id`, `username`, `displayname` — lightweight user reference
@@ -116,7 +136,7 @@ tweet.quotedTweet.rawContent if tweet.quotedTweet else None
 ## Imports
 
 ```python
-from twscrape.models import Tweet, User, Media, Trend
+from twscrape.models import Tweet, User, Media, Trend, AccountAbout
 # or
 from twscrape import *  # exports all models
 ```

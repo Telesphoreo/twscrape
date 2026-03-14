@@ -81,6 +81,47 @@ class TextLink(JSONTrait):
 
 
 @dataclass
+class AccountAbout(JSONTrait):
+    screen_name: str
+    name: str
+    rest_id: int
+    account_based_in: str | None
+    location_accurate: bool | None
+    affiliate_username: str | None
+    source: str | None
+    username_changes: int | None
+    username_last_changed_at: int | None
+    is_identity_verified: bool | None
+    verified_since_msec: int | None
+
+    @staticmethod
+    def parse(obj: dict):
+        about = obj.get("about_profile") or {}
+        core = obj.get("core") or {}
+        username_changes = about.get("username_changes", {}).get("count")
+        username_last_changed = about.get("username_changes", {}).get("last_changed_at_msec")
+        verification = obj.get("verification_info", {}) or {}
+        reason = verification.get("reason", {}) or {}
+        return AccountAbout(
+            screen_name=core.get("screen_name", ""),
+            name=core.get("name", ""),
+            rest_id=obj.get("rest_id"),
+            account_based_in=about.get("account_based_in"),
+            location_accurate=about.get("location_accurate"),
+            affiliate_username=about.get("affiliate_username"),
+            source=about.get("source"),
+            username_changes=int(username_changes) if username_changes is not None else None,
+            username_last_changed_at=int(username_last_changed)
+            if username_last_changed is not None
+            else None,
+            is_identity_verified=verification.get("is_identity_verified"),
+            verified_since_msec=int(reason.get("verified_since_msec"))
+            if reason.get("verified_since_msec")
+            else None,
+        )
+
+
+@dataclass
 class UserRef(JSONTrait):
     id: int
     id_str: str
@@ -744,23 +785,40 @@ def _parse_items(rep: httpx.Response, kind: str, limit: int = -1):
     # check for dict, because httpx.Response can be mocked in tests with different type
     res = rep if isinstance(rep, dict) else rep.json()
     obj = to_old_rep(res)
-
+    entry_ids = obj.get("entry_ids", [])
     ids = set()
-    for x in obj[key].values():
-        if limit != -1 and len(ids) >= limit:
-            # todo: move somewhere in configuration like force_limit
-            # https://github.com/vladkens/twscrape/issues/26#issuecomment-1656875132
-            # break
-            pass
 
-        try:
-            tmp = Cls.parse(x, obj)
-            if tmp.id not in ids:
-                ids.add(tmp.id)
-                yield tmp
-        except Exception as e:
-            _write_dump(kind, e, x, obj)
-            continue
+    if entry_ids:
+        # Use entry_ids to maintain correct ordering and filter out quoted/referenced tweets
+        for rid in entry_ids:
+            if rid not in obj[key]:
+                continue
+
+            if limit != -1 and len(ids) >= limit:
+                break
+
+            x = obj[key][rid]
+            try:
+                tmp = Cls.parse(x, obj)
+                if tmp.id not in ids:
+                    ids.add(tmp.id)
+                    yield tmp
+            except Exception as e:
+                _write_dump(kind, e, x, obj)
+                continue
+    else:
+        for x in obj[key].values():
+            if limit != -1 and len(ids) >= limit:
+                break
+
+            try:
+                tmp = Cls.parse(x, obj)
+                if tmp.id not in ids:
+                    ids.add(tmp.id)
+                    yield tmp
+            except Exception as e:
+                _write_dump(kind, e, x, obj)
+                continue
 
 
 # public helpers
@@ -810,3 +868,15 @@ def parse_users(rep: httpx.Response, limit: int = -1) -> Generator[User, None, N
 
 def parse_trends(rep: httpx.Response, limit: int = -1) -> Generator[Trend, None, None]:
     return _parse_items(rep, kind="trends", limit=limit)  # type: ignore
+
+
+def parse_about(rep: httpx.Response | dict) -> AccountAbout | None:
+    try:
+        res = rep if isinstance(rep, dict) else rep.json()
+        obj = get_or(res, "data.user_result_by_screen_name.result")
+        if not obj:
+            return None
+        return AccountAbout.parse(obj)
+    except Exception as e:
+        logger.error(f"Failed to parse about profile - {type(e)}:\n{traceback.format_exc()}")
+        return None

@@ -6,7 +6,17 @@ from httpx import Response
 
 from .accounts_pool import AccountsPool
 from .logger import set_log_level
-from .models import Tweet, User, parse_trends, parse_tweet, parse_tweets, parse_user, parse_users
+from .models import (
+    AccountAbout,
+    Tweet,
+    User,
+    parse_about,
+    parse_trends,
+    parse_tweet,
+    parse_tweets,
+    parse_user,
+    parse_users,
+)
 from .queue_client import QueueClient
 from .utils import encode_params, find_obj, get_by_path
 
@@ -21,6 +31,7 @@ OP_Retweeters = "IQ43ps3iEcdrGV_OL1QaRw/Retweeters"
 OP_UserTweets = "lZRf8IC-GTuGxDwcsHW8aw/UserTweets"
 OP_UserTweetsAndReplies = "gXCeOBFsTOuimuCl1qXimg/UserTweetsAndReplies"
 OP_ListLatestTweetsTimeline = "NRigOCel0QKiWs_GuBgOzw/ListLatestTweetsTimeline"
+OP_AboutAccountQuery = "zs_jFPFT78rBpXv9Z3U2YQ/AboutAccountQuery"
 OP_BlueVerifiedFollowers = "mtuBQZOWziVtBIcSLg6V_g/BlueVerifiedFollowers"
 OP_UserCreatorSubscriptions = "7qcGrVKpcooih_VvJLA1ng/UserCreatorSubscriptions"
 OP_UserMedia = "1D04dx9H2pseMQAbMjXTvQ/UserMedia"
@@ -145,6 +156,10 @@ class API:
                     if not (
                         x["entryId"].startswith("cursor-")
                         or x["entryId"].startswith("messageprompt-")
+                    )
+                    and (
+                        x.get("content", {}).get("items")
+                        or x.get("content", {}).get("itemContent")
                     )
                 ]
                 cur = self._get_cursor(obj, cursor_type)
@@ -296,7 +311,7 @@ class API:
             **(kv or {}),
         }
         async with aclosing(
-            self._gql_items(op, kv, limit=limit, cursor_type="ShowMoreThreads")
+            self._gql_items(op, kv, limit=limit, cursor_type="Bottom")
         ) as gen:
             async for x in gen:
                 yield x
@@ -591,3 +606,15 @@ class API:
                     if x.id not in seen:
                         seen.add(x.id)
                         yield x
+
+    # user_about
+
+    async def user_about_raw(self, username: str, kv: KV = None):
+        op = OP_AboutAccountQuery
+        kv = {"screenName": username, **(kv or {})}
+        ft = {"responsive_web_graphql_timeline_navigation_enabled": True}
+        return await self._gql_item(op, kv, ft)
+
+    async def user_about(self, username: str, kv: KV = None) -> AccountAbout | None:
+        rep = await self.user_about_raw(username, kv=kv)
+        return parse_about(rep) if rep else None

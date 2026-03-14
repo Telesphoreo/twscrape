@@ -14,7 +14,7 @@ twscrape has built-in systems for rate limiting, account rotation, request pacin
 - **Rate limits**: Monitors API headers, rotates accounts at 80% usage before hitting the wall
 - **Account rotation**: LRU selection, rotates every 1-3 pages during pagination, 5-second cooldowns
 - **Request pacing**: 1-3 second random jitter between requests (human-like timing)
-- **Deduplication**: Three-level dedup prevents duplicate tweets/users within a query
+- **Deduplication**: Multi-level dedup — entry_ids ordering filters out embedded/quoted tweets from primary results, plus seen-ID sets prevent duplicates
 - **Stuck pagination**: Detects repeated cursors and stops automatically
 - **Anti-bot headers**: Generates realistic `x-client-transaction-id`, rotates user agents
 - **Ban detection**: Identifies bans, marks accounts inactive, switches to healthy ones
@@ -119,6 +119,20 @@ try:
 except NoAccountError:
     logger.error("All accounts exhausted or rate-limited")
     raise
+```
+
+## Result Ordering & Quoted Tweets
+
+Results are returned in timeline order using entry IDs from the API response. Quoted and retweeted tweets are **not** yielded as separate primary results — they're only accessible via the parent tweet's `.quotedTweet` and `.retweetedTweet` fields:
+
+```python
+async for tweet in api.search("query", limit=50):
+    # This is a primary search result
+    print(tweet.rawContent)
+
+    # Access the quoted tweet if present
+    if tweet.quotedTweet:
+        print(f"  Quoting: {tweet.quotedTweet.rawContent}")
 ```
 
 ## Performance Tips

@@ -134,7 +134,7 @@ def to_old_obj(obj: dict):
     }
 
 
-def to_old_rep(obj: dict) -> dict[str, dict]:
+def to_old_rep(obj: dict) -> dict[str, Any]:
     tmp = get_typed_object(obj, defaultdict(list))
 
     tw1 = [x for x in tmp.get("Tweet", []) if "legacy" in x]
@@ -150,7 +150,26 @@ def to_old_rep(obj: dict) -> dict[str, dict]:
     trends = [x for x in tmp.get("TimelineTrend", [])]
     trends = {x["name"]: x for x in trends}
 
-    return {"tweets": {**tw1, **tw2}, "users": users, "trends": trends}
+    # Extract entry IDs for result ordering (filters out quoted/referenced tweets)
+    # https://github.com/vladkens/twscrape/issues/112
+    entries = get_by_path(obj, "entries") or []
+    entry_ids: list[str] = []
+    for x in entries:
+        eid = x.get("entryId", "")
+        if (
+            eid.startswith("tweet-")
+            or eid.startswith("user-")
+            or eid.startswith("trend-")
+        ):
+            entry_ids.append(eid.split("-", 1)[-1])
+        elif eid.startswith("conversationthread-") or eid.startswith("profile-conversation-"):
+            # Compound entries contain sub-items with individual tweet/user IDs
+            for item in x.get("content", {}).get("items", []):
+                rest_id = get_or(item, "item.itemContent.tweet_results.result.rest_id")
+                if rest_id:
+                    entry_ids.append(str(rest_id))
+
+    return {"tweets": {**tw1, **tw2}, "users": users, "trends": trends, "entry_ids": entry_ids}
 
 
 def print_table(rows: list[dict], hr_after=False):

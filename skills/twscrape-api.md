@@ -28,6 +28,7 @@ await gather(api.search("query", limit=20, kv={"product": "Media"})) # Media
 ```python
 await api.user_by_login("username")          # User | None
 await api.user_by_id(44196397)               # User | None
+await api.user_about("username")             # AccountAbout | None (identity verification, username history, location)
 
 api.followers(uid, limit=-1, kv=None)            # async gen -> User
 api.verified_followers(uid, limit=-1, kv=None)   # async gen -> User
@@ -73,11 +74,12 @@ api.bookmarks(limit=-1, kv=None)                 # async gen -> Tweet (own bookm
 
 ## Raw Variants
 
-Every paginated method has a `_raw` variant returning `httpx.Response`:
+Every method has a `_raw` variant returning `httpx.Response`:
 ```python
 api.search_raw(q, limit, kv)
 api.user_by_id_raw(uid, kv)
 api.user_by_login_raw(login, kv)
+api.user_about_raw(username, kv)
 api.tweet_details_raw(twid, kv)
 api.followers_raw(uid, limit, kv)
 # ... etc for all methods
