@@ -21,7 +21,7 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "beautifulsoup4>=4.14.3",
     "fake-useragent>=2.2.0",
-    "httpx>=0.28.1",
+    "httpx[socks]>=0.28.1",
     "loguru>=0.7.3",
     "pyotp>=2.9.0",
 ]
