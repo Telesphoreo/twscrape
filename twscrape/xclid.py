@@ -46,20 +46,30 @@ def script_url(k: str, v: str):
     return f"https://abs.twimg.com/responsive-web/client-web/{k}.{v}.js"
 
 
-def get_scripts_list(text: str):
-    scripts = text.split('e=>e+"."+')[1].split('[e]+"a.js"')[0]
+def _parse_js_object(raw: str) -> dict:
+    """Parse a JS object literal like {1:"abc",2:"def"} into a Python dict."""
     try:
-        data = json.loads(scripts)
+        return json.loads(raw)
     except json.decoder.JSONDecodeError:
-        # Find unquoted keys {key:"value"} and convert to {"key":"value"}
-        fixed_scripts = re.sub(r'([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:', r'\1"\2":', scripts)
+        # Quote bare numeric or identifier keys: {1:"v"} -> {"1":"v"}
+        fixed = re.sub(r'([{,]\s*)([a-zA-Z_$0-9][a-zA-Z0-9_$]*)\s*:', r'\1"\2":', raw)
         try:
-            data = json.loads(fixed_scripts)
+            return json.loads(fixed)
         except json.decoder.JSONDecodeError as e:
             raise Exception("Failed to parse scripts") from e
 
-    for k, v in data.items():
-        yield script_url(k, f"{v}a")
+
+def get_scripts_list(text: str):
+    # Format: g.u=e=>(({name_map}[e]||e)+"."+{hash_map}[e]+"a.js")
+    name_raw = text.split('g.u=e=>((')[1].split('}[e]||e)')[0] + '}'
+    name_map = _parse_js_object(name_raw)
+
+    hash_raw = text.split('+"."+')[1].split('[e]+"a.js"')[0]
+    hash_map = _parse_js_object(hash_raw)
+
+    for k, v in hash_map.items():
+        name = name_map.get(k, k)
+        yield script_url(name, f"{v}a")
 
 
 # MARK: XClientTxId parsing

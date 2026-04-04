@@ -1,26 +1,30 @@
-import pytest
 from twscrape.xclid import get_scripts_list
 
 
-def test_get_scripts_list_malformed_json():
-    # Test case with malformed JSON (unquoted keys)
-    malformed_text_content = 'node_modules_pnpm_ws_8_18_0_node_modules_ws_browser_js:"12345",other_key:"67890"'
-    malformed_text = 'stuff... e=>e+"."+' + '{' + malformed_text_content + '}' + '[e]+"a.js"... stuff'
+def test_get_scripts_list_with_name_map():
+    # New format: g.u=e=>(({name_map}[e]||e)+"."+{hash_map}[e]+"a.js")
+    # Numeric keys in hash map, separate name map resolves IDs to chunk names
+    text = (
+        'stuff... g.u=e=>(({1:"ondemand.s",2:"bundle.Main"}[e]||e)'
+        '+"."+{1:"abc1234",2:"def5678"}[e]+"a.js")... stuff'
+    )
 
-    scripts = list(get_scripts_list(malformed_text))
-
-    assert len(scripts) == 2
-    assert "https://abs.twimg.com/responsive-web/client-web/node_modules_pnpm_ws_8_18_0_node_modules_ws_browser_js.12345a.js" in scripts
-    assert "https://abs.twimg.com/responsive-web/client-web/other_key.67890a.js" in scripts
-
-
-def test_get_scripts_list_normal_json():
-    # Test case with normal JSON (quoted keys)
-    normal_text_content = '"normal_key":"12345","another_key":"67890"'
-    normal_text = 'stuff... e=>e+"."+' + '{' + normal_text_content + '}' + '[e]+"a.js"... stuff'
-
-    scripts = list(get_scripts_list(normal_text))
+    scripts = list(get_scripts_list(text))
 
     assert len(scripts) == 2
-    assert "https://abs.twimg.com/responsive-web/client-web/normal_key.12345a.js" in scripts
-    assert "https://abs.twimg.com/responsive-web/client-web/another_key.67890a.js" in scripts
+    assert "https://abs.twimg.com/responsive-web/client-web/ondemand.s.abc1234a.js" in scripts
+    assert "https://abs.twimg.com/responsive-web/client-web/bundle.Main.def5678a.js" in scripts
+
+
+def test_get_scripts_list_name_map_fallback():
+    # When a key exists in hash map but not in name map, the numeric ID is used as-is
+    text = (
+        'stuff... g.u=e=>(({1:"ondemand.s"}[e]||e)'
+        '+"."+{1:"abc1234",2:"def5678"}[e]+"a.js")... stuff'
+    )
+
+    scripts = list(get_scripts_list(text))
+
+    assert len(scripts) == 2
+    assert "https://abs.twimg.com/responsive-web/client-web/ondemand.s.abc1234a.js" in scripts
+    assert "https://abs.twimg.com/responsive-web/client-web/2.def5678a.js" in scripts
