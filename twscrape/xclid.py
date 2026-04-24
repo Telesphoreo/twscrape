@@ -5,6 +5,7 @@ import math
 import random
 import re
 import time
+from typing import Iterator
 
 import bs4
 import httpx
@@ -46,30 +47,31 @@ def script_url(k: str, v: str):
     return f"https://abs.twimg.com/responsive-web/client-web/{k}.{v}.js"
 
 
-def _parse_js_object(raw: str) -> dict:
-    """Parse a JS object literal like {1:"abc",2:"def"} into a Python dict."""
+def _js_obj_to_dict(s: str) -> dict:
+    """
+    Parse a JavaScript object literal with unquoted numeric keys into a Python dict.
+    Handles both plain integers (20113) and scientific notation (88e3 → 88000).
+    """
+    # Scientific notation first so the plain-int pass does not consume only the mantissa
+    s = re.sub(r'\b(\d+e\d+)(?=\s*:)', lambda m: '"' + str(int(float(m.group(1)))) + '"', s)
+    # Plain integer keys
+    s = re.sub(r'\b(\d+)(?=\s*:)', r'"\1"', s)
+    return json.loads('{' + s + '}')
+
+
+def get_scripts_list(text: str) -> Iterator[str]:
+    # u.u = e => "" + (({name_map})[e] || e) + "." + ({hash_map})[e] + "a.js"
+    # Two separate maps: chunk_id → chunk_name, chunk_id → hash.
     try:
-        return json.loads(raw)
-    except json.decoder.JSONDecodeError:
-        # Quote bare numeric or identifier keys: {1:"v"} -> {"1":"v"}
-        fixed = re.sub(r'([{,]\s*)([a-zA-Z_$0-9][a-zA-Z0-9_$]*)\s*:', r'\1"\2":', raw)
-        try:
-            return json.loads(fixed)
-        except json.decoder.JSONDecodeError as e:
-            raise Exception("Failed to parse scripts") from e
-
-
-def get_scripts_list(text: str):
-    # Format: g.u=e=>(({name_map}[e]||e)+"."+{hash_map}[e]+"a.js")
-    name_raw = text.split('g.u=e=>((')[1].split('}[e]||e)')[0] + '}'
-    name_map = _parse_js_object(name_raw)
-
-    hash_raw = text.split('+"."+')[1].split('[e]+"a.js"')[0]
-    hash_map = _parse_js_object(hash_raw)
-
-    for k, v in hash_map.items():
-        name = name_map.get(k, k)
-        yield script_url(name, f"{v}a")
+        name_raw = text.split('u.u=e=>""+(({')[1].split('})[e]||e)')[0]
+        hash_raw = text.split('|e)+"."+({')[1].split('})[e]+"a.js"')[0]
+        names  = _js_obj_to_dict(name_raw)
+        hashes = _js_obj_to_dict(hash_raw)
+        for k, hash_val in hashes.items():
+            name = names.get(k, k)
+            yield script_url(name, f"{hash_val}a")
+    except (json.JSONDecodeError, IndexError) as e:
+        raise Exception("Failed to parse scripts") from e
 
 
 # MARK: XClientTxId parsing
