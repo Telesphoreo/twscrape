@@ -60,10 +60,10 @@ def _js_obj_to_dict(s: str) -> dict:
 
 
 def get_scripts_list(text: str) -> Iterator[str]:
-    # u.u = e => "" + (({name_map})[e] || e) + "." + ({hash_map})[e] + "a.js"
-    # Two separate maps: chunk_id → chunk_name, chunk_id → hash.
+    # <var>.u = e => "" + (({name_map})[e] || e) + "." + ({hash_map})[e] + "a.js"
+    # Variable prefix is minified and changes (u.u, _.u, etc.), so split on .u=e=>...
     try:
-        name_raw = text.split('u.u=e=>""+(({')[1].split('})[e]||e)')[0]
+        name_raw = text.split('.u=e=>""+(({')[1].split('})[e]||e)')[0]
         hash_raw = text.split('|e)+"."+({')[1].split('})[e]+"a.js"')[0]
         names  = _js_obj_to_dict(name_raw)
         hashes = _js_obj_to_dict(hash_raw)
